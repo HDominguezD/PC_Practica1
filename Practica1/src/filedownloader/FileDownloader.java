@@ -17,21 +17,23 @@ public class FileDownloader {
 
 	static final String DIR = "./Downloads";
         private int nDownloads;
-        volatile boolean descargados = false;
+        volatile boolean allDownloaded = false;
         volatile boolean[] petitions; //petitions[i] == true if the thread i has to download a new file
         volatile String[] actualFileUrl; //the url of the file that the thread i has to download
         volatile String[] actualFileName; //the name of the file that the thread i has to download
         volatile int actualThread;
-        volatile boolean newPetition = false;
+        volatile boolean[] newPetition;
         volatile boolean petitionDone = false;
         
 	public FileDownloader(int n) {
             this.nDownloads = n;
             this.petitions = new boolean[nDownloads];
+            this.newPetition = new boolean[nDownloads];
             actualFileUrl = new String[nDownloads];
             actualFileName = new String[nDownloads];
             for(int i = 0; i < nDownloads; i++){
                 petitions[i] = false;
+                newPetition[i] = false;
             }
             
 	}
@@ -49,8 +51,8 @@ public class FileDownloader {
         actualThread = 0;
         actualFileUrl[0] = downloadsFileURL;
         actualFileName[0] = "output";
-        newPetition = true;
-        DownloadRunnable firstFile = new DownloadRunnable();
+        newPetition[0] = true;
+        DownloadRunnable firstFile = new DownloadRunnable(0);
         firstFile.downloadUrls();
 
         //read the urls of the first file
@@ -66,7 +68,7 @@ public class FileDownloader {
         //Array of N threads and initialise the threads
         Thread[] threads = new Thread[nDownloads];
         for(int i = 0; i < nDownloads; i++){
-            threads[i] = new Thread(new DownloadRunnable());
+            threads[i] = new Thread(new DownloadRunnable(i));
             System.out.println("Creado el hilo " + threads[i].getId());
             threads[i].start();
         }
@@ -86,12 +88,10 @@ public class FileDownloader {
                             petitions[actualThread] = true;
                             actualFileUrl[actualThread] = url;
                             actualFileName[actualThread] = fileUrls.get(0)+".part" + (fileUrls.indexOf(url)-1);
-                            newPetition = true;
+                            newPetition[actualThread] = true;
                             //in this moment the actualThreads start to download the url
 
                         }
-                        //if the actual thread is in the critical section, wait until the critical section is finished
-                            while(newPetition){}
                             //going to the next thread
                             actualThread++;
                             actualThread = actualThread % nDownloads;
@@ -106,12 +106,12 @@ public class FileDownloader {
 
         }
 
-        descargados = true;
+        allDownloaded = true;
 
-        //esperamos a que acaben los threads
+        /*//wait until the threads has finished
         for(int i = 0; i < nDownloads ; i++){
             while(threads[i].isAlive());
-        }
+        }*/
 
         SplitAndMerge splitAndMerge = new SplitAndMerge();
         for(List<String> fileUrls : files){
@@ -119,10 +119,8 @@ public class FileDownloader {
         }
         for(List<String> fileUrls : files){
             for(String url : fileUrls){
-                if(fileUrls.get(0) != url){
                     Path path =Paths.get(DIR+ "/" +  fileUrls.get(0)+".part" + fileUrls.indexOf(url)+".txt");
                     Files.deleteIfExists(path);
-                }
             }
         }          
         Files.deleteIfExists(Paths.get(file.getPath()));
@@ -157,12 +155,15 @@ public class FileDownloader {
         
     private class DownloadRunnable implements Runnable {
         
-        public DownloadRunnable(){};
+        private int threadID;
+        public DownloadRunnable(int thread){
+            threadID = thread;
+        };
         
         @Override
         public void run() {
             //running the threads until all urls has been downloaded
-            while(!descargados){
+            while(!allDownloaded){
                 try {
                         downloadUrls();
                     } catch (IOException ex) {
@@ -173,14 +174,14 @@ public class FileDownloader {
         }
         private void downloadUrls() throws MalformedURLException, IOException{
             //preprotocol
-            while(!newPetition){}
+            while(!newPetition[threadID] && !allDownloaded){}
             //critical section
-                 int position = actualThread;
-                 URL website = new URL(actualFileUrl[position]);
-                 Path pathOut = Paths.get(DIR+ "/"+ actualFileName[position] + ".txt");
+                 URL website = new URL(actualFileUrl[threadID]);
+                 Path pathOut = Paths.get(DIR+ "/"+ actualFileName[threadID] + ".txt");
+                 System.out.println("hilo " + threadID + " Descargando " + pathOut);
                  
             //postprotocol
-            newPetition = false;
+            newPetition[threadID] = false;
  
             //No critical section
             try (InputStream in = website.openStream()) {
@@ -188,9 +189,9 @@ public class FileDownloader {
                 folder.mkdirs(); // create the new folder
                 Files.copy(in, pathOut, StandardCopyOption.REPLACE_EXISTING);
             }
-            System.out.println(actualFileName[position] +" Descargado");
+            System.out.println(actualFileName[threadID] +" Descargado");
             
-            petitions[position] = false; //enabled the thread to process new downloads
+            petitions[threadID] = false; //enabled the thread to process new downloads
            
             
         }

@@ -108,10 +108,10 @@ public class FileDownloader {
 
         allDownloaded = true;
 
-        /*//wait until the threads has finished
+        //wait until the threads has finished
         for(int i = 0; i < nDownloads ; i++){
             while(threads[i].isAlive());
-        }*/
+        }
 
         SplitAndMerge splitAndMerge = new SplitAndMerge();
         for(List<String> fileUrls : files){
@@ -149,7 +149,7 @@ public class FileDownloader {
 	
     public static void main(String[] args) throws IOException {
             String downloadFile = "https://github.com/jesussanchezoro/PracticaPC/raw/master/descargas.txt";
-            FileDownloader fd = new FileDownloader(4);
+            FileDownloader fd = new FileDownloader(8);
             fd.process(downloadFile);
     }
         
@@ -175,6 +175,7 @@ public class FileDownloader {
         private void downloadUrls() throws MalformedURLException, IOException{
             //preprotocol
             while(!newPetition[threadID] && !allDownloaded){}
+                if(allDownloaded) return;
             //critical section
                  URL website = new URL(actualFileUrl[threadID]);
                  Path pathOut = Paths.get(DIR+ "/"+ actualFileName[threadID] + ".txt");
